@@ -2,7 +2,7 @@
 	"name": "mkindexer",
 	"displayName": "MkIndexer",
 	"description": "Indexer of Makefiles",
-	"version": "0.0.1",
+	"version": "0.3.0",
 	"engines": {
 		"vscode": "^1.53.0"
 	},
@@ -19,6 +19,8 @@
 		"url": "https://github.com/Serj1032/MakefileIndexer"
 	},
 	"main": "./out/extension.js",
+	"publisher": "SergeyVKravchenko",
+	"repository": "https://github.com/Serj1032/MakefileIndexer",
 	"contributes": {
 		"commands": [
 			{

@@ -16,17 +16,34 @@ let mk: Makefile;
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
 
-	let makefilePath = vscode.window.activeTextEditor?.document.fileName
-	if (makefilePath != undefined && fs.existsSync(makefilePath)) {
-		mk = new Makefile(makefilePath);
+	let doc = vscode.window.activeTextEditor?.document;
+	if (doc != null) {
+		if (doc.languageId.toLowerCase() == "makefile") {
+			mk = new Makefile(doc.fileName);
+		}
 	}
+
+	// if (makefilePath != undefined && fs.existsSync(makefilePath)) {
+	// 	mk = new Makefile(makefilePath);
+	// }
 
 	let DocumentSelector = { scheme: 'file', language: 'makefile' };
 
+	vscode.window.onDidChangeVisibleTextEditors(() => {
+		let doc = vscode.window.activeTextEditor?.document;
+		if (doc != null) {
+			if (doc.languageId.toLowerCase() == "makefile") {
+				mk = new Makefile(doc.fileName);
+			}
+		}
+	});
+
 	vscode.workspace.onDidSaveTextDocument(() => {
-		let makefilePath = vscode.window.activeTextEditor?.document.fileName
-		if (makefilePath != undefined && fs.existsSync(makefilePath)) {
-			mk = new Makefile(makefilePath);
+		let doc = vscode.window.activeTextEditor?.document;
+		if (doc != null) {
+			if (doc.languageId.toLowerCase() == "makefile") {
+				mk = new Makefile(doc.fileName);
+			}
 		}
 	});
 

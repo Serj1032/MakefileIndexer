@@ -11,12 +11,16 @@ import { exec } from "child_process";
 export class Makefile {
     private path: string = "";
     private variables: Map<string, Variable[]> = new Map();
+    private includes: Makefile[] = new Array();
 
     public constructor(path: string | undefined) {
 
-        if (path != undefined) {
+        if (path != undefined && fs.existsSync(path)) {
             this.path = path;
             this.startIndex();
+        }
+        else {
+            vscode.window.showErrorMessage("Can't open Makefile: " + path);
         }
     }
 
@@ -52,7 +56,7 @@ export class Makefile {
 
         for (let l = 0; l < lines.length; l++) {
 
-            console.log(lines[l]);
+            // console.log(lines[l]);
 
             if (lines[l].length == 0)
                 continue;
@@ -62,6 +66,11 @@ export class Makefile {
             }
             else if (regExpImport.test(lines[l])) { // если строка содержит include другого makefile
                 console.log("Found import other makefile: " + lines[l]);
+                regExpImport.lastIndex = 0;
+                let include = regExpImport.exec(lines[l]);
+                if (include != null) {
+                    this.parseIncludeMakefile(this.path, include[1]);
+                }
             }
 
             regExpImport.lastIndex = 0;
@@ -70,6 +79,28 @@ export class Makefile {
 
     }
 
+    //https://www.gnu.org/software/make/manual/html_node/Include.html
+    private parseIncludeMakefile(rootPath: string, path: string) {
+        // TODO строка path может содержать паттерны
+        let absPath = path;
+        if (absPath.trim()[0] != '/') {
+            absPath = rootPath.trim().replace(/(\w+)$/g, path);
+        }
+
+        if (fs.existsSync(absPath)) {
+            this.includes.push(new Makefile(absPath));
+            console.log("Included makefile processed: " + absPath);
+        }
+        else {
+            console.log("Can't open included makefile: " + absPath);
+        }
+    }
+
+    /**
+     * Добавить объявление переменной
+     * @param line строка с объявлением переменной
+     * @param line_idx индекс линии в файле
+     */
     private addVariable(line: string, line_idx: number) {
         const regexp = /(\w+)\s*([:+?]?)=(.*)/g;
         let res = regexp.exec(line);
@@ -89,6 +120,10 @@ export class Makefile {
         regexp.lastIndex = 0;
     }
 
+    /**
+     * Найти все объяаления переменной в файле
+     * @param variable имя переменной
+     */
     public getDefinition(variable: string): vscode.ProviderResult<vscode.Definition> {
 
         let items = this.variables.get(variable);
@@ -105,6 +140,12 @@ export class Makefile {
         return null;
     }
 
+    /**
+     * Раскрыть значение переменной
+     * @param variable имя переменной
+     * @param vsPosition положение в файле
+     * @param doc файл
+     */
     public getHover(variable: string, vsPosition: vscode.Position, doc: vscode.TextDocument): vscode.ProviderResult<vscode.Hover> {
         let items = this.variables.get(variable);
         let md = new vscode.MarkdownString();
@@ -113,27 +154,27 @@ export class Makefile {
 
         if (items) {
             let res = this.extractValueOfVariable(variable, doc.uri.path, vsPosition.line);
-            /*
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].file == doc.uri.path && items[i].line >= vsPosition.line)
-                    break;
-
-                res += items[i].getValue();
+            if (res != null) {
+                md.appendCodeblock(res, "Makefile");
+                return new vscode.Hover(md);
             }
-            */
-            md.appendCodeblock(res, "Makefile");
-            return new vscode.Hover(md);
         }
-
 
         return null;
     }
 
-    private extractValueOfVariable(variable: string, file: string, line: number): string {
+    /**
+     * Рекурсивная функция для разрешения значения переменной
+     * @param variable имя переменной
+     * @param file файл, в котором ведется поиск
+     * @param line индекс линии в файле
+     */
+    private extractValueOfVariable(variable: string, file: string, line: number): string | null {
         let items = this.variables.get(variable);
 
         if (items) {
             let i = 0;
+            // Найдем предыдущее объявление переменной
             for (; i < items.length; i++) {
                 if (items[i].line >= line) {
                     break;
@@ -141,8 +182,7 @@ export class Makefile {
             }
             i--;
 
-            if (i < 0) return "";
-
+            if (i < 0) return null;
 
             let values = items[i].getValue();
 
@@ -153,18 +193,18 @@ export class Makefile {
                 let regexpRes = regexpInnerVars.exec(values);
                 while (regexpRes) {
                     let extracted = this.extractValueOfVariable(regexpRes[1], items[i].file, items[i].line);
-                    values = values.replace(regexpRes[0], extracted);
-
+                    if (extracted != null) {
+                        values = values.replace(regexpRes[0], extracted);
+                    }
                     regexpRes = regexpInnerVars.exec(values);
                 }
                 regexpInnerVars.lastIndex = 0;
-
             }
 
             return values;
         }
 
-        return "";
+        return null;
     }
 
     public testExec(path: string) {
